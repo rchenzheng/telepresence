@@ -27,11 +27,11 @@ import (
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
 	var code connector.LoginResult_Code
-	_, err := GetTelepresencePro(ctx)
+	telProBinary, err := GetTelepresencePro(ctx)
 	if err != nil {
 		return connector.LoginResult_UNSPECIFIED, err
 	}
-	err = WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
 		return err
@@ -55,7 +55,11 @@ func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient co
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
 func Logout(ctx context.Context) error {
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	telProBinary, err := GetTelepresencePro(ctx)
+	if err != nil {
+		return err
+	}
+	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})
@@ -71,7 +75,13 @@ func Logout(ctx context.Context) error {
 // EnsureLoggedOut ensures that the user is logged out of Ambassador Cloud.  Returns nil if not
 // logged in.
 func EnsureLoggedOut(ctx context.Context) error {
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	/*
+		telProBinary, err := GetTelepresencePro(ctx)
+		if err != nil {
+			return err
+		}
+	*/
+	err := WithConnector(ctx, "", func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})
@@ -93,7 +103,11 @@ func HasLoggedIn(ctx context.Context) bool {
 
 func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*connector.UserInfo, error) {
 	var userInfo *connector.UserInfo
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	telProBinary, err := GetTelepresencePro(ctx)
+	if err != nil {
+		return userInfo, err
+	}
+	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		userInfo, err = connectorClient.GetCloudUserInfo(ctx, &connector.UserInfoRequest{
 			AutoLogin: autoLogin,
@@ -109,7 +123,11 @@ func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*conne
 
 func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (string, error) {
 	var keyData *connector.KeyData
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	telProBinary, err := GetTelepresencePro(ctx)
+	if err != nil {
+		return "", err
+	}
+	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		keyData, err = connectorClient.GetCloudAPIKey(ctx, &connector.KeyRequest{
 			AutoLogin:   autoLogin,
@@ -128,7 +146,11 @@ func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (st
 // output file for the user to apply to their cluster
 func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
 	var licenseData *connector.LicenseData
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	telProBinary, err := GetTelepresencePro(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		licenseData, err = connectorClient.GetCloudLicense(ctx, &connector.LicenseRequest{
 			Id: id,

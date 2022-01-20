@@ -33,19 +33,19 @@ var ErrNoTrafficManager = errors.New("telepresence traffic manager is not connec
 // "Connect" gRPC call or any other gRPC call except for UserNotifications.
 //
 // Nested calls to WithConnector will reuse the outer connection.
-func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, true, true, fn)
+func WithConnector(ctx context.Context, daemonBinary string, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, daemonBinary, true, true, fn)
 }
 
 // WithStartedConnector is like WithConnector, but returns ErrNoUserDaemon if the connector is not
 // already running, rather than starting it.
 func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, false, withNotify, fn)
+	return withConnector(ctx, "", false, withNotify, fn)
 }
 
 type connectorConnCtxKey struct{}
 
-func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
+func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
