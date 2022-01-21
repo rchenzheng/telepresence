@@ -55,11 +55,13 @@ func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient co
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
 func Logout(ctx context.Context) error {
-	telProBinary, err := GetTelepresencePro(ctx)
-	if err != nil {
-		return err
-	}
-	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	/*
+		telProBinary, err := GetTelepresencePro(ctx)
+		if err != nil {
+			return err
+		}
+	*/
+	err := WithConnector(ctx, "", func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})

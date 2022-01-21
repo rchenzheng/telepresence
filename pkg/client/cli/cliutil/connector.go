@@ -52,6 +52,11 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 		return fn(ctx, connectorClient)
 	}
 
+	connectorDaemon := client.GetExe()
+	if daemonBinary != "" {
+		connectorDaemon = daemonBinary
+	}
+
 	var conn *grpc.ClientConn
 	started := false
 	for {
@@ -63,6 +68,7 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoUserDaemon
 			if maybeStart {
+				fmt.Printf("Launching binary: %s", connectorDaemon)
 				fmt.Println("Launching Telepresence User Daemon")
 				if err = proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
