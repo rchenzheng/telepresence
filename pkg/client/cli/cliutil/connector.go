@@ -19,6 +19,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -49,6 +50,10 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
+		err := updateDaemon(ctx, daemonBinary, connectorClient)
+		if err != nil {
+			return err
+		}
 		return fn(ctx, connectorClient)
 	}
 
@@ -68,9 +73,8 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoUserDaemon
 			if maybeStart {
-				fmt.Printf("Launching binary: %s", connectorDaemon)
 				fmt.Println("Launching Telepresence User Daemon")
-				if err = proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
+				if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
 				}
 
@@ -93,6 +97,10 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 		if err := versionCheck(ctx, "User", connectorClient); err != nil {
 			return err
 		}
+	}
+	err := updateDaemon(ctx, daemonBinary, connectorClient)
+	if err != nil {
+		return err
 	}
 	if !withNotify {
 		return fn(ctx, connectorClient)
@@ -168,4 +176,19 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		err = nil
 	}
 	return err
+}
+
+func updateDaemon(ctx context.Context, daemonBinary string, client connector.ConnectorClient) error {
+	// If no daemon Binary is passed in, just roll with what we have
+	if daemonBinary == "" {
+		return nil
+	}
+	connectorVersion, err := client.Version(ctx, &empty.Empty{})
+	if err != nil {
+		return err
+	}
+	if connectorVersion.Executable == daemonBinary {
+		return nil
+	}
+	return errcat.User.New("Connector daemon needs to be updated to use Telepresence Pro. Please run telepresence quit -u and try again")
 }
