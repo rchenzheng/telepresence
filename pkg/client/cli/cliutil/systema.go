@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
@@ -27,11 +27,7 @@ import (
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
 	var code connector.LoginResult_Code
-	telProBinary, err := GetTelepresencePro(ctx)
-	if err != nil {
-		return connector.LoginResult_UNSPECIFIED, err
-	}
-	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
 		return err
@@ -55,13 +51,7 @@ func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient co
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
 func Logout(ctx context.Context) error {
-	/*
-		telProBinary, err := GetTelepresencePro(ctx)
-		if err != nil {
-			return err
-		}
-	*/
-	err := WithConnector(ctx, "", func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})
@@ -77,13 +67,7 @@ func Logout(ctx context.Context) error {
 // EnsureLoggedOut ensures that the user is logged out of Ambassador Cloud.  Returns nil if not
 // logged in.
 func EnsureLoggedOut(ctx context.Context) error {
-	/*
-		telProBinary, err := GetTelepresencePro(ctx)
-		if err != nil {
-			return err
-		}
-	*/
-	err := WithConnector(ctx, "", func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})
@@ -105,11 +89,7 @@ func HasLoggedIn(ctx context.Context) bool {
 
 func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*connector.UserInfo, error) {
 	var userInfo *connector.UserInfo
-	telProBinary, err := GetTelepresencePro(ctx)
-	if err != nil {
-		return userInfo, err
-	}
-	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		userInfo, err = connectorClient.GetCloudUserInfo(ctx, &connector.UserInfoRequest{
 			AutoLogin: autoLogin,
@@ -125,11 +105,7 @@ func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*conne
 
 func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (string, error) {
 	var keyData *connector.KeyData
-	telProBinary, err := GetTelepresencePro(ctx)
-	if err != nil {
-		return "", err
-	}
-	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		keyData, err = connectorClient.GetCloudAPIKey(ctx, &connector.KeyRequest{
 			AutoLogin:   autoLogin,
@@ -148,11 +124,7 @@ func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (st
 // output file for the user to apply to their cluster
 func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
 	var licenseData *connector.LicenseData
-	telProBinary, err := GetTelepresencePro(ctx)
-	if err != nil {
-		return "", "", err
-	}
-	err = WithConnector(ctx, telProBinary, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		licenseData, err = connectorClient.GetCloudLicense(ctx, &connector.LicenseRequest{
 			Id: id,
@@ -166,14 +138,15 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 }
 
 func GetTelepresencePro(ctx context.Context) (string, error) {
-	executable, err := os.Executable()
+	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
-		return "", errcat.Unknown.Newf("Unable to get path for executable: %s", err)
+		return "", errcat.Unknown.Newf("Unable to get path to config files: %s", err)
 	}
-	telProLocation := fmt.Sprintf("%s/telepresence-pro", filepath.Dir(executable))
+
+	telProLocation := fmt.Sprintf("%s/telepresence-pro", dir)
 	if _, err := os.Stat(telProLocation); os.IsNotExist(err) {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Printf("Telepresence Pro is required to use login features, can Telepresence install it? (y/n)")
+		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
 		reply, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
@@ -181,7 +154,7 @@ func GetTelepresencePro(ctx context.Context) (string, error) {
 
 		reply = strings.TrimSpace(reply)
 		if reply == "n" {
-			return "", errcat.User.New("Telepresence Pro must be installed to login\n")
+			return "", nil
 		}
 		// TODO: replace the hardcoded 0.0.1 with this once publishing is working
 		clientVersion := strings.Trim(client.Version(), "v")
@@ -211,6 +184,8 @@ func GetTelepresencePro(ctx context.Context) (string, error) {
 			return "", errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
 		}
 
+		//TODO: fix update the config to use the new telepresence cli instead of erroring
+		return "", errcat.User.Newf("Update daemons.userDaemonBinary in %s to %s", client.GetConfigFile(ctx), telProLocation)
 	}
 	return telProLocation, nil
 }

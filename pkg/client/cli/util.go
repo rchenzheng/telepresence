@@ -42,7 +42,7 @@ type connectorState struct {
 //  - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, request *connector.ConnectRequest, f func(context.Context, *connectorState) error) error {
 	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		return cliutil.WithConnector(ctx, "", func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			didConnect, connInfo, err := connect(ctx, connectorClient, cmd.OutOrStdout(), request)
 			if err != nil {
 				return err

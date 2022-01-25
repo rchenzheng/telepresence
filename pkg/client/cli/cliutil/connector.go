@@ -19,7 +19,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -34,32 +33,23 @@ var ErrNoTrafficManager = errors.New("telepresence traffic manager is not connec
 // "Connect" gRPC call or any other gRPC call except for UserNotifications.
 //
 // Nested calls to WithConnector will reuse the outer connection.
-func WithConnector(ctx context.Context, daemonBinary string, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, daemonBinary, true, true, fn)
+func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, true, true, fn)
 }
 
 // WithStartedConnector is like WithConnector, but returns ErrNoUserDaemon if the connector is not
 // already running, rather than starting it.
 func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, "", false, withNotify, fn)
+	return withConnector(ctx, false, withNotify, fn)
 }
 
 type connectorConnCtxKey struct{}
 
-func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
+func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
-		err := updateDaemon(ctx, daemonBinary, connectorClient)
-		if err != nil {
-			return err
-		}
 		return fn(ctx, connectorClient)
-	}
-
-	connectorDaemon := client.GetExe()
-	if daemonBinary != "" {
-		connectorDaemon = daemonBinary
 	}
 
 	var conn *grpc.ClientConn
@@ -73,6 +63,7 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoUserDaemon
 			if maybeStart {
+				connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
 				fmt.Println("Launching Telepresence User Daemon")
 				if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
@@ -93,14 +84,11 @@ func withConnector(ctx context.Context, daemonBinary string, maybeStart bool, wi
 	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
 	connectorClient := connector.NewConnectorClient(conn)
 	if !started {
+		daemonBinary := client.GetConfig(ctx).Daemons.UserDaemonBinary
 		// Ensure that the already running daemon has the correct version
-		if err := versionCheck(ctx, "User", connectorClient); err != nil {
+		if err := versionCheck(ctx, "User", daemonBinary, connectorClient); err != nil {
 			return err
 		}
-	}
-	err := updateDaemon(ctx, daemonBinary, connectorClient)
-	if err != nil {
-		return err
 	}
 	if !withNotify {
 		return fn(ctx, connectorClient)
@@ -176,19 +164,4 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		err = nil
 	}
 	return err
-}
-
-func updateDaemon(ctx context.Context, daemonBinary string, client connector.ConnectorClient) error {
-	// If no daemon Binary is passed in, just roll with what we have
-	if daemonBinary == "" {
-		return nil
-	}
-	connectorVersion, err := client.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return err
-	}
-	if connectorVersion.Executable == daemonBinary {
-		return nil
-	}
-	return errcat.User.New("Connector daemon needs to be updated to use Telepresence Pro. Please run telepresence quit -u and try again")
 }
