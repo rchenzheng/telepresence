@@ -67,6 +67,7 @@ type Session interface {
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient
 	GetCurrentNamespaces(forClientAccess bool) []string
+	ActualNamespace(string) string
 }
 
 type Service interface {
