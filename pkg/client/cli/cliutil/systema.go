@@ -26,8 +26,12 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
+	_, err := GetTelepresencePro(ctx)
+	if err != nil {
+		return connector.LoginResult_UNSPECIFIED, err
+	}
 	var code connector.LoginResult_Code
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err = WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
 		return err
@@ -159,7 +163,7 @@ func GetTelepresencePro(ctx context.Context) (string, error) {
 		// TODO: replace the hardcoded 0.0.1 with this once publishing is working
 		clientVersion := strings.Trim(client.Version(), "v")
 		systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/0.0.1/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH)
+		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/2.4.11-0.20220126175758-fb3345300275-7cd8520/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH)
 		fmt.Printf("installing %s version %s to %s\n", installString, clientVersion, telProLocation)
 
 		resp, err := http.Get(installString)
